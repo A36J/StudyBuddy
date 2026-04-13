@@ -14,7 +14,7 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto';
-      // Cap at 200px OR 30% of window height, whichever is smaller
+      
       const maxHeight = Math.min(200, window.innerHeight * 0.3);
       const newHeight = Math.min(textarea.scrollHeight, maxHeight);
       textarea.style.height = `${newHeight}px`;

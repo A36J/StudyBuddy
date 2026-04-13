@@ -12,8 +12,8 @@ const DUMMY_CHATS: Chat[] = [
 
 function App() {
   // Application State
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isNotesCollapsed, setIsNotesCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [isNotesCollapsed, setIsNotesCollapsed] = useState(true);
   const [chats, setChats] = useState<Chat[]>(DUMMY_CHATS);
   const [activeChatId, setActiveChatId] = useState<string | null>('1');
 

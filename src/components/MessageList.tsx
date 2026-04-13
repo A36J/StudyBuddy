@@ -1,0 +1,42 @@
+import React, { useEffect, useRef } from 'react';
+import { MessageBubble,ThoughtRenderer,ToolCallRenderer } from './MessageBubble';
+import type { Message } from './MessageBubble';
+
+
+interface MessageListProps {
+  messages: Message[];
+}
+
+export const MessageList = React.memo(({ messages }: MessageListProps) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin">
+      {messages.map((msg) => (
+        <div 
+          key={msg.id} 
+          // Group everything belonging to one "turn" together
+          className={`flex flex-col gap-2 w-full ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+        >
+          {/* 1. Thoughts render completely independently */}
+          {msg.thought && <ThoughtRenderer thought={msg.thought} />}
+
+          {/* 2. Tools render completely independently */}
+          {msg.toolCalls?.map((tool, idx) => (
+            <ToolCallRenderer key={tool.id || idx} tool={tool} />
+          ))}
+
+          {/* 3. Text content renders completely independently */}
+          {msg.content && <MessageBubble content={msg.content} role={msg.role} />}
+        </div>
+      ))}
+      <div ref={scrollRef} className="h-px" />
+    </div>
+  );
+});
