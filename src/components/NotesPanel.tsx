@@ -14,11 +14,12 @@ export function NotesPanel({ isCollapsed, toggleCollapse }: NotesPanelProps) {
       className={`
         flex flex-col h-full bg-slate-50 dark:bg-neutral-900 rounded-xl 
         border border-slate-200 dark:border-neutral-800 transition-all duration-300 ease-in-out shrink-0
-        ${isCollapsed ? 'w-16' : 'w-[35%] min-w-[320px] max-w-[600px]'}
+        ${isCollapsed ? 'w-16' 
+            : 'w-[clamp(320px,35%,600px)]'}
       `}
     >
       {/* HEADER */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
+      <div className="flex items-center justify-between h-14 px-4 border-b border-slate-200 dark:border-neutral-800">
         {!isCollapsed && (
           <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-semibold">
             <FileEdit className="w-5 h-5 text-indigo-500" />
@@ -58,7 +59,7 @@ export function NotesPanel({ isCollapsed, toggleCollapse }: NotesPanelProps) {
           />
         ) : (
           <div className="flex-1 flex flex-col items-center py-6 gap-4">
-            {/* Vertical text indicator when collapsed */}
+            
             <div className="writing-vertical text-slate-400 tracking-widest text-sm uppercase font-medium" style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
               Notes
             </div>

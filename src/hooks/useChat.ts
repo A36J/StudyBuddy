@@ -1,13 +1,58 @@
-import { useState } from 'react';
-import type { Message, ToolCall } from '../components/MessageBubble'; // Adjust path as needed
+// src/hooks/useChat.ts
+import { useState, useEffect } from 'react';
+import { api } from '../services/api';
+import type { Message, ToolCall } from '../components/MessageBubble'; // Adjust path
 
-export function useChat(threadId: string = "test_thread_001") {
-  const [messages, setMessages] = useState<Message[]>([
-    { id: '1', role: 'ai', content: 'Hello! I am ready to help you analyze your documents.' }
-  ]);
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+export function useChat(threadId: string | null ) {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingHistory, setIsFetchingHistory] = useState(false);
 
+  // 1. Fetch history whenever the active thread changes
+  useEffect(() => {
+    if (!threadId) {
+      setMessages([]);
+      return;
+    }
+
+    async function loadHistory() {
+      setIsFetchingHistory(true);
+      try {
+        const history = await api.getMessages(threadId as string);
+        
+        
+        
+          setMessages(history);
+       
+      } catch (error) {
+        console.error("Failed to load chat history:", error);
+      } finally {
+        setIsFetchingHistory(false);
+      }
+    }
+
+    loadHistory();
+  }, [threadId]);
+
+  
   const sendMessage = async (content: string) => {
+    if (!threadId) return;
+
+    // 1. Is this a Ghost Thread?
+    const isFirstMessage = messages.length === 0;
+
+    if (isFirstMessage) {
+      try {
+        // Create the thread in DB only now
+        await api.createChat(threadId, "Untitled Chat");
+      } catch (err) {
+        console.error("Failed to create thread on first message:", err);
+        return; 
+      }
+    }
+
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content };
     const aiMessageId = (Date.now() + 1).toString();
     
@@ -21,10 +66,11 @@ export function useChat(threadId: string = "test_thread_001") {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/search', {
+      // Updated to use dynamic API_BASE and standard REST routing
+      const response = await fetch(`${API_BASE}/api/threads/${threadId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: content, thread_id: threadId }),
+        body: JSON.stringify({ query: content }), 
       });
 
       if (!response.ok || !response.body) {
@@ -66,7 +112,7 @@ export function useChat(threadId: string = "test_thread_001") {
                   };
                   currentMsg.toolCalls = [...(currentMsg.toolCalls || []), newTool];
                 } else if (parsed.type === "error") {
-                  currentMsg.content = `⚠️ Backend Error: ${parsed.content}`;
+                  currentMsg.content += `\n\n⚠️ Backend Error: ${parsed.content}`;
                 }
 
                 newMessages[msgIndex] = currentMsg;
@@ -96,6 +142,7 @@ export function useChat(threadId: string = "test_thread_001") {
   return {
     messages,
     isLoading,
+    isFetchingHistory, 
     sendMessage
   };
 }

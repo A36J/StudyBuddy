@@ -41,7 +41,7 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
     <div className="p-4 bg-slate-50 dark:bg-neutral-900">
       <form 
         onSubmit={handleSubmit}
-        className="flex flex-col bg-white dark:bg-neutral-800 rounded-3xl border border-slate-200 dark:border-neutral-700 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all overflow-hidden"
+        className="flex flex-col  bg-white dark:bg-neutral-800 rounded-3xl border border-slate-200 dark:border-neutral-700 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all overflow-hidden"
       >
         {/* Top Section: Full Width Textarea */}
         <div className="px-4 pt-4 pb-2">
@@ -51,7 +51,7 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask a question or type '/' for commands..."
-            className="w-full max-h-[200px] max-h-[30vh] min-h-[24px] bg-transparent resize-none outline-none text-slate-800 dark:text-slate-100 placeholder:text-slate-400 scrollbar-thin"
+            className="w-full  max-h-[30vh] min-h-[24px] bg-transparent resize-none outline-none text-slate-800 dark:text-slate-100 placeholder:text-slate-400 scrollbar-thin"
             rows={1}
           />
         </div>
@@ -98,9 +98,7 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
         </div>
       </form>
       
-      <div className="text-center mt-3 text-xs text-slate-400 dark:text-slate-500">
-        AI can make mistakes. Verify important information.
-      </div>
+      
     </div>
   );
 }

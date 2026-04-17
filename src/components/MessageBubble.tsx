@@ -1,4 +1,6 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export interface ToolCall {
   id: string; 
@@ -30,7 +32,7 @@ export const MessageBubble = React.memo(({ content, role }: MessageBubbleProps) 
   return (
     <div 
       className={`
-        py-3.5 break-words whitespace-pre-wrap leading-relaxed
+        py-3.5 wrap-break-word leading-relaxed
         w-fit max-w-[85%] md:max-w-[75%] 
         ${isUser 
           ? 'px-5 bg-slate-100 dark:bg-neutral-800 text-slate-800 dark:text-slate-100 rounded-3xl rounded-br-sm ml-auto' 
@@ -38,7 +40,43 @@ export const MessageBubble = React.memo(({ content, role }: MessageBubbleProps) 
         }
       `}
     >
-      {content}
+      <ReactMarkdown 
+        remarkPlugins={[remarkGfm]}
+        components={{
+          
+          h1: ({ children }) => <h1 className="text-2xl font-bold mt-5 mb-3 border-b border-gray-300 pb-2">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-xl font-semibold mt-4 mb-2">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-lg font-semibold mt-3 mb-2">{children}</h3>,
+          p: ({ children }) => <p className="mb-3 leading-relaxed">{children}</p>,
+          
+          // --- Lists ---
+          ul: ({ children }) => <ul className="list-disc list-inside space-y-1.5 ml-4 my-3">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal list-inside space-y-1.5 ml-4 my-3">{children}</ol>,
+          li: ({ children }) => <li className="pl-1">{children}</li>,
+
+          // --- Links ---
+          a: ({ children, href }) => (
+            <a href={href} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">
+              {children}
+            </a>
+          ),
+          
+
+          // --- Tables: Light theme style ---
+          table: ({ children }) => (
+            <div className="overflow-x-auto my-4 border border-slate-200 dark:border-neutral-700 rounded-xl shadow-sm">
+              <table className="min-w-full divide-y divide-slate-200 dark:divide-neutral-700">
+                {children}
+              </table>
+            </div>
+          ),
+          th: ({ children }) => <th className="px-6 py-3 bg-slate-50 dark:bg-neutral-800/50 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">{children}</th>,
+          td: ({ children }) => <td className="px-6 py-4 whitespace-normal text-sm text-slate-800 dark:text-slate-300 border-t border-slate-200 dark:border-neutral-700">{children}</td>,
+        
+        }}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   );
 });
