@@ -20,28 +20,30 @@ StudyBuddy is a full-stack AI-powered research assistant. It leverages a high-pe
 ### 1. Installation & Setup
 Clone the repository and run the automated setup command to install both Node modules and the Python virtual environment:
 
-\`\`\`bash
+```bash
 git clone https://github.com/A36J/StudyBuddy.git
 cd studybuddy
+```
 
 # Installs frontend dependencies and creates/populates backend venv
+```bash
 npm run setup
-\`\`\`
 
-### 3. Environment Variables
-Create a \`.env\` file in the root directory based on the example provided:
+```
+### 2. Environment Variables
+Create a .env file in the root directory based on the example provided:
 
-\`\`\`bash
+```bash
 cp .env.example .env
-\`\`\`
-*Make sure to fill in your \`OPENROUTER_API_KEY\`, \`PINECONE_API_KEY\`, and \`DATABASE_URL\`.*
+```
+
 
 ### 4. Run Development Server
 Start the entire stack (Frontend + Backend) with a single command:
 
-\`\`\`bash
+```bash
 npm run dev
-\`\`\`
+```
 
 ---
 
