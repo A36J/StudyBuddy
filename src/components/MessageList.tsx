@@ -43,7 +43,7 @@ export const MessageList = React.memo(({ messages }: MessageListProps) => {
           className={`flex flex-col gap-2 w-full ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
         >
           {/* 1. Thoughts render completely independently */}
-          {msg.thought && <ThoughtRenderer thought={msg.thought} />}
+          {msg.reasoning && <ThoughtRenderer thought={msg.reasoning} />}
 
           {/* 2. Tools render completely independently */}
           {msg.toolCalls?.map((tool, idx) => (

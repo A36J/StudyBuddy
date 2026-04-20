@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { Loader2, MessageSquareDashed, Upload, Trash2, Files, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2, MessageSquareDashed, Trash2, Files, Plus } from 'lucide-react';
 import { MessageList } from './MessageList'; 
 import { ChatInput } from './ChatInput';
 import { useChat } from '../hooks/useChat';
-import type { SourceFile } from '../App'; // Import the type from wherever you defined it
+import type { SourceFile } from '../App'; 
 
 interface ChatPanelProps {
   activeChatId: string | null;
@@ -19,21 +19,22 @@ export function ChatPanel({ activeChatId, sources, onUploadSource, onDeleteSourc
   const [isSourcesMenuOpen, setIsSourcesMenuOpen] = useState(false);
 
   // Filter sources for the current active chat thread
-  const threadSources = sources.filter(s => s.chatId === activeChatId);
-  const activeSourcesCount = threadSources.filter(s => s.isActive && s.status === 'ready').length;
+  //const threadSources = sources.filter(s => s.chatId === activeChatId);
+  const activeSourcesCount = sources.filter(s => s.isActive && s.status === 'ready').length;
 
   if (!activeChatId) {
     return (
-      <main className="flex-1 min-w-[300px] flex flex-col h-full bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-200 dark:border-neutral-800 items-center justify-center text-slate-500 dark:text-slate-400">
+      <main className="flex-1 min-w-75 flex flex-col h-full bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-200 dark:border-neutral-800 items-center justify-center text-slate-500 dark:text-slate-400">
         <MessageSquareDashed className="w-12 h-12 mb-4 opacity-50" />
         <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">No Chat Selected</h3>
         <p className="text-sm">Select a conversation from the sidebar or start a new one.</p>
       </main>
     );
   }
+  console.log("messages:",messages);
 
   return (
-    <main className="flex-1 min-w-[300px] flex flex-col h-full bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-200 dark:border-neutral-800 overflow-hidden relative">
+    <main className="flex-1 min-w-75 flex flex-col h-full bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-200 dark:border-neutral-800 overflow-hidden relative">
       
       {/* HEADER */}
       <header className="px-6 h-14 border-b border-slate-200 dark:border-neutral-800 bg-white/50 dark:bg-neutral-900/50 backdrop-blur-sm shrink-0 flex justify-end items-center gap-4 relative z-20">
@@ -76,10 +77,10 @@ export function ChatPanel({ activeChatId, sources, onUploadSource, onDeleteSourc
 
             {/* 2. List of Thread Documents */}
             <div className="max-h-64 overflow-y-auto p-2 space-y-1 scrollbar-thin">
-              {threadSources.length === 0 ? (
+              {sources.length === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400 p-4 text-center">No documents in this thread yet.</p>
               ) : (
-                threadSources.map(source => (
+                sources.map(source => (
                   <div key={source.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-neutral-800/50 group">
                     
                     <div className="flex flex-col min-w-0 pr-2">
@@ -126,6 +127,7 @@ export function ChatPanel({ activeChatId, sources, onUploadSource, onDeleteSourc
           <p className="text-sm text-slate-500">Loading chat history...</p>
         </div>
       ) : (
+        
         <MessageList messages={messages} />
       )}
 

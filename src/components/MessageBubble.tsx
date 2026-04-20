@@ -1,6 +1,10 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex'
+
+import 'katex/dist/katex.min.css';
 
 export interface ToolCall {
   id: string; 
@@ -12,7 +16,7 @@ export interface Message {
   id: string;
   role: 'user' | 'ai';
   content: string;
-  thought?: string; 
+  reasoning?: string; 
   toolCalls?: ToolCall[];
   toolResults?: any[] ;
 }
@@ -41,7 +45,8 @@ export const MessageBubble = React.memo(({ content, role }: MessageBubbleProps) 
       `}
     >
       <ReactMarkdown 
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         components={{
           
           h1: ({ children }) => <h1 className="text-2xl font-bold mt-5 mb-3 border-b border-gray-300 pb-2">{children}</h1>,
@@ -60,9 +65,17 @@ export const MessageBubble = React.memo(({ content, role }: MessageBubbleProps) 
               {children}
             </a>
           ),
+
+          //--- Formulaes ---
+          span: ({ className, children }) => {
+            if (className?.includes('katex')) {
+              return <span className="my-2 inline-block">{children}</span>;
+            }
+            return <span>{children}</span>;
+          },
           
 
-          // --- Tables: Light theme style ---
+          // --- Tables ---
           table: ({ children }) => (
             <div className="overflow-x-auto my-4 border border-slate-200 dark:border-neutral-700 rounded-xl shadow-sm">
               <table className="min-w-full divide-y divide-slate-200 dark:divide-neutral-700">

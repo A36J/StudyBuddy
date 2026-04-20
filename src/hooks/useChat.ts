@@ -1,81 +1,63 @@
 // src/hooks/useChat.ts
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { api } from '../services/api';
-import type { Message, ToolCall } from '../components/MessageBubble'; // Adjust path
+// import type { Message, ToolCall } from '../components/MessageBubble'; // Adjust path
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-export function useChat(threadId: string | null ) {
-  const [messages, setMessages] = useState<Message[]>([]);
+
+
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: any;
+}
+
+export interface Message {
+  id: string; 
+  role: 'user' | 'ai';
+  content: string;
+  reasoning?: string;
+  toolCalls?: ToolCall[];
+}
+
+export function useChat(threadId: string | null) {
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingHistory, setIsFetchingHistory] = useState(false);
+  const queryClient = useQueryClient();
 
-  // 1. Fetch history whenever the active thread changes
-  useEffect(() => {
-    if (!threadId) {
-      setMessages([]);
-      return;
-    }
+  // 1. Fetch History via React Query
+  const { data: messages = [], isLoading: isFetchingHistory } = useQuery({
+    queryKey: ['messages', threadId],
+    queryFn: () => api.getMessages(threadId as string),
+    enabled: !!threadId,
+    staleTime: 1000 * 60 * 5, // Cache messages for 5 mins
+  });
 
-    async function loadHistory() {
-      setIsFetchingHistory(true);
-      try {
-        const history = await api.getMessages(threadId as string);
-        
-        
-        
-          setMessages(history);
-       
-      } catch (error) {
-        console.error("Failed to load chat history:", error);
-      } finally {
-        setIsFetchingHistory(false);
-      }
-    }
-
-    loadHistory();
-  }, [threadId]);
-
-  
   const sendMessage = async (content: string) => {
     if (!threadId) return;
 
-    // 1. Is this a Ghost Thread?
-    const isFirstMessage = messages.length === 0;
-
-    if (isFirstMessage) {
-      try {
-        // Create the thread in DB only now
-        await api.createChat(threadId, "Untitled Chat");
-      } catch (err) {
-        console.error("Failed to create thread on first message:", err);
-        return; 
-      }
-    }
-
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content };
-    const aiMessageId = (Date.now() + 1).toString();
     
-    // Add user message and initialize an empty AI message immediately
-    setMessages((prev) => [
-      ...prev, 
-      userMsg,
-      { id: aiMessageId, role: 'ai', content: '', toolCalls: [] }
-    ]);
-    
+    // Add user message to React Query Cache immediately
+    queryClient.setQueryData(['messages', threadId], (old: Message[] = []) => [...old, userMsg]);
     setIsLoading(true);
 
+    const isFirstMessage = messages.length === 0;
+    if (isFirstMessage) {
+      try { await api.createChat(threadId, "Untitled Chat"); } 
+      catch (err) { console.error("Failed to create thread", err); return; }
+    }
+
     try {
-      // Updated to use dynamic API_BASE and standard REST routing
-      const response = await fetch(`${API_BASE}/api/threads/${threadId}/chat`, {
+      const response = await fetch(`/api/threads/${threadId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: content }), 
       });
 
-      if (!response.ok || !response.body) {
-        throw new Error(`Server error: ${response.status}`);
-      }
+      if (!response.ok || !response.body) throw new Error(`Server error: ${response.status}`);
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -92,27 +74,43 @@ export function useChat(threadId: string | null ) {
         for (const part of parts) {
           if (part.startsWith("data: ")) {
             try {
-              const dataStr = part.replace("data: ", "");
-              const parsed = JSON.parse(dataStr);
+              const parsed = JSON.parse(part.replace("data: ", ""));
+              const runId = parsed.run_id;
 
-              setMessages((prev) => {
-                const newMessages = [...prev];
-                const msgIndex = newMessages.findIndex(m => m.id === aiMessageId);
-                if (msgIndex === -1) return prev;
+              // Update the React Query cache directly as the stream arrives
+              queryClient.setQueryData(['messages', threadId], (oldMessages: Message[] = []) => {
+                const newMessages = [...oldMessages];
+
+                if (parsed.type === "new_message") {
+                  if (!newMessages.find(m => m.id === runId)) {
+                    newMessages.push({ id: runId, role: 'ai', content: '', reasoning: '', toolCalls: [] });
+                  }
+                  return newMessages;
+                }
+
+                let msgIndex = newMessages.findIndex(m => m.id === runId);
+                
+                if (msgIndex === -1) {
+                    if (parsed.type === "error") {
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        if (lastMsg) lastMsg.content += `\n\n⚠️ Backend Error: ${parsed.content}`;
+                        return newMessages;
+                    }
+                    newMessages.push({ id: runId, role: 'ai', content: '', reasoning: '', toolCalls: [] });
+                    msgIndex = newMessages.length - 1;
+                }
 
                 const currentMsg = { ...newMessages[msgIndex] };
 
                 if (parsed.type === "content") {
                   currentMsg.content += parsed.content;
+                } else if (parsed.type === "reasoning") {
+                  currentMsg.reasoning = (currentMsg.reasoning || '') + parsed.content;
                 } else if (parsed.type === "tool_call") {
-                  const newTool: ToolCall = {
-                    id: Date.now().toString() + Math.random(),
-                    name: parsed.name,
-                    args: parsed.args
-                  };
-                  currentMsg.toolCalls = [...(currentMsg.toolCalls || []), newTool];
-                } else if (parsed.type === "error") {
-                  currentMsg.content += `\n\n⚠️ Backend Error: ${parsed.content}`;
+                  currentMsg.toolCalls = [
+                    ...(currentMsg.toolCalls || []),
+                    { id: Date.now().toString() + Math.random(), name: parsed.name, args: parsed.args }
+                  ];
                 }
 
                 newMessages[msgIndex] = currentMsg;
@@ -126,23 +124,21 @@ export function useChat(threadId: string | null ) {
       }
     } catch (error) {
       console.error("Failed to fetch response:", error);
-      setMessages((prev) => {
-        const newMessages = [...prev];
-        const msgIndex = newMessages.findIndex(m => m.id === aiMessageId);
-        if (msgIndex !== -1 && !newMessages[msgIndex].content) {
-          newMessages[msgIndex].content = "⚠️ Connection interrupted.";
+      
+      queryClient.setQueryData(['messages', threadId], (old: Message[] = []) => [
+        ...old,
+        {
+          id: Date.now().toString(),
+          role: 'ai',
+          content: `⚠️ Request failed: ${error instanceof Error ? error.message : "Unknown error occurred."}`,
+          reasoning: '',
+          toolCalls: []
         }
-        return newMessages;
-      });
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  return {
-    messages,
-    isLoading,
-    isFetchingHistory, 
-    sendMessage
-  };
+  return { messages, isLoading, isFetchingHistory, sendMessage };
 }
