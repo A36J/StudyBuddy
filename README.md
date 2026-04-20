@@ -1,75 +1,62 @@
-# React + TypeScript + Vite
+# StudyBuddy
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+StudyBuddy is a full-stack AI-powered research assistant. It leverages a high-performance **FastAPI** backend and a modern **Vite + React** frontend to provide an integrated environment for AI-driven research, note-taking, and thread management.
 
-Currently, two official plugins are available:
+## Capabilities
+- **AI Chat & Research:** Advanced threading system powered by LangChain and LangGraph.
+- **Note Management:** Create and organize notes linked directly to your research context.
+- **Vector Search:** High-speed document retrieval and context-awareness via Pinecone.
+- **Unified Deployment:** Single-click deployment architecture designed for Vercel Serverless.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Tech Stack
+- **Frontend:** React, Vite, TypeScript, Tailwind CSS.
+- **Backend:** Python 3.12, FastAPI, PostgreSQL (asyncpg).
+- **AI/Data:** LangGraph, OpenAI, Pinecone, PyMuPDF.
 
-## React Compiler
+---
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+## 🚀 Quick Start
 
-Note: This will impact Vite dev & build performances.
+### 1. Installation & Setup
+Clone the repository and run the automated setup command to install both Node modules and the Python virtual environment:
 
-## Expanding the ESLint configuration
+\`\`\`bash
+git clone https://github.com/A36J/StudyBuddy.git
+cd studybuddy
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+# Installs frontend dependencies and creates/populates backend venv
+npm run setup
+\`\`\`
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 3. Environment Variables
+Create a \`.env\` file in the root directory based on the example provided:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+\`\`\`bash
+cp .env.example .env
+\`\`\`
+*Make sure to fill in your \`OPENROUTER_API_KEY\`, \`PINECONE_API_KEY\`, and \`DATABASE_URL\`.*
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### 4. Run Development Server
+Start the entire stack (Frontend + Backend) with a single command:
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+\`\`\`bash
+npm run dev
+\`\`\`
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+---
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Features left to do
+
+### Advanced RAG Pipeline (Hybrid + Reranking)
+* **Hybrid Search:** Implementing a combination of Semantic (Vector) search and Keyword (BM25) search to capture both conceptual meaning and exact terminology.
+* **Precision Reranking:** Integrating **Cross-Encoders** (via Cohere or BGE-Reranker) to re-evaluate the top $k$ retrieved documents, significantly reducing hallucinations.
+* **Improved Document Loading:** Migrating from basic loaders to **opendataloader** for superior handling of complex tables, charts, and multi-column PDF layouts.
+
+### Agent Architecture (Supervisor + Workers)
+Moving away from linear DAGs to a **Hierarchical Multi-Agent System**:
+* **Supervisor Agent:** A centralized orchestrator that analyzes user intent and routes tasks to specialized workers.
+* **Research Worker:** Specialized in high-depth vector database querying and synthesis.
+
+
+###  Security & Auth
+* **Authentication:** Implementing **Clerk** (via a decoupled auth flow) to support secure user sessions and private research siloes.
