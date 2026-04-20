@@ -1,3 +1,32 @@
 @import "tailwindcss";
 
 /* You can put any custom CSS below this line if needed, but Tailwind handles the rest! */
+@media print {
+  /* 1. Hide everything on the entire page by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* 2. Unhide ONLY the note editor and everything inside it */
+  #printable-note-editor, 
+  #printable-note-editor * {
+    visibility: visible;
+  }
+
+  
+  #printable-note-editor {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+  }
+
+  
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    
+  }
+}

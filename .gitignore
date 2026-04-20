@@ -7,10 +7,37 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies & Build Outputs
 node_modules
 dist
 dist-ssr
 *.local
+# Python dependencies
+venv/
+env/
+.venv/
+build/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Python Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Vercel
+.vercel
 
 # Local Environment Variables
 .env
@@ -18,6 +45,9 @@ dist-ssr
 .env.development.local
 .env.test.local
 .env.production.local
+# Common python env files
+.env.py
+.python-version
 
 # Editor directories and files
 .vscode/*
@@ -29,3 +59,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Project specific
+.ipynb_checkpoints

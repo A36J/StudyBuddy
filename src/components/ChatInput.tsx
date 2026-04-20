@@ -51,7 +51,7 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask a question or type '/' for commands..."
-            className="w-full  max-h-[30vh] min-h-[24px] bg-transparent resize-none outline-none text-slate-800 dark:text-slate-100 placeholder:text-slate-400 scrollbar-thin"
+            className="w-full  max-h-[30vh] min-h-6 bg-transparent resize-none outline-none text-slate-800 dark:text-slate-100 placeholder:text-slate-400 scrollbar-thin"
             rows={1}
           />
         </div>
