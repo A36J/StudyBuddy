@@ -93,6 +93,7 @@ function App() {
 
     try {
       const { uploadUrl, docId } = await api.getPresignedUrl(file.name,activeChatId);
+      console.log(uploadUrl)
 
       const newSource: SourceFile = { 
         id: docId, name: file.name, status: 'uploading', chatId: activeChatId, isActive: true 
@@ -104,7 +105,7 @@ function App() {
       await fetch(uploadUrl, {
         method: 'PUT',
         body: file,
-        headers: { 'Content-Type': file.type },
+        headers: { 'Content-Type': 'application/pdf' },
       });
 
       // Update status to processing

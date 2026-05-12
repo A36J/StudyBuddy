@@ -184,7 +184,7 @@ def create_agent_tools(vector_store) -> list:
         async with db_pool.acquire() as conn:
             
             records = await conn.fetch(
-                """SELECT id, name as filename, status 
+                """SELECT id, name as filename, status, image_count, page_count 
                    FROM documents 
                    WHERE thread_id = $1""",
                 uuid.UUID(thread_id)
@@ -195,7 +195,7 @@ def create_agent_tools(vector_store) -> list:
             
         output = ["Active Documents in Session:"]
         for r in records:
-            output.append(f"- Name: '{r['filename']}' | ID: {r['id']} | Status: {r['status']}")
+            output.append(f"- Name: '{r['filename']}' | ID: {r['id']} | Status: {r['status']} | Image count:{r['image_count']} | Pages:{r['page_count']}")
             
         return "\n".join(output)
 

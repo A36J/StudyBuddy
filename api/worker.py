@@ -12,15 +12,12 @@ from collections import defaultdict
 from dotenv import load_dotenv
 from urllib.parse import urlparse
 from pydantic import SecretStr
-import fitz  
 import base64
 from typing import cast, List, Dict, Any
 
-# --- PyMuPDF ---
-# import fitz  # Standard PyMuPDF
-# import base64
+from botocore.config import Config
 
-# --- LangChain Imports ---
+from langchain_opendataloader_pdf import OpenDataLoaderPDFLoader
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import PromptTemplate
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -38,7 +35,13 @@ s3_client = boto3.client(
     's3',
     aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    region_name=os.getenv("AWS_REGION")
+    region_name=os.getenv("AWS_REGION"),
+    endpoint_url='https://s3.eu-north-1.amazonaws.com',
+    config=Config(
+        signature_version='s3v4',
+        region_name=os.getenv("AWS_REGION"),
+        s3={'addressing_style': 'virtual'} # <-- Forces bucket.s3.region.amazonaws.com
+    )
 )
 
 api_key = os.getenv("OPENROUTER_API_KEY")
@@ -46,7 +49,7 @@ if not api_key:
     raise ValueError("OPENROUTER_API_KEY is not set in the environment.")
 
 llm = ChatOpenAI(
-    model="nvidia/nemotron-3-super-120b-a12b:free",
+    model="google/gemini-3.1-flash-lite",
     api_key=SecretStr(api_key),
     base_url="https://openrouter.ai/api/v1",
     
@@ -55,7 +58,7 @@ llm = ChatOpenAI(
 )
 
 vision_llm = ChatOpenAI(
-    model="nvidia/nemotron-nano-12b-v2-vl:free",  
+    model="google/gemini-3.1-flash-lite",  
     api_key=SecretStr(api_key),
     base_url="https://openrouter.ai/api/v1",
     temperature=0.0,
@@ -112,7 +115,7 @@ async def async_s3_download(bucket: str, key: str, tmp_path: str):
     await loop.run_in_executor(None, s3_client.download_file, bucket, key, tmp_path)
 
 
-async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int = 1):
+async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int = 5):
     llm_semaphore = asyncio.Semaphore(max_concurrency)
     parsed_url = urlparse(s3_url)
     bucket = parsed_url.netloc
@@ -134,42 +137,29 @@ async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int
         if doc_stats["file_size_bytes"] == 0:
             raise ValueError("Downloaded file is empty (0 bytes).")
 
-        # --- NEW PyMuPDF (fitz) EXTRACTION LOGIC ---
+        # --- NEW OpenDataLoader EXTRACTION LOGIC ---
         def extract_pdf_data(filepath):
+            loader = OpenDataLoaderPDFLoader(
+                file_path=filepath,
+                format="markdown",
+                # hybrid="docling-fast", 
+                # hybrid_url="http://localhost:5002",
+                # hybrid_mode="auto" 
+            )
+            documents = loader.load()
+            
             extracted_pages = []
-            doc = fitz.open(filepath)
-            for page_index in range(len(doc)):
-                page = doc[page_index]
-                page_no = page_index + 1
-                
-                # Extract raw text
-                text_content = cast(str, page.get_text("text"))
-                
-                # Extract images and convert to base64 markdown format
-                image_markdowns = []
-                for img in page.get_images(full=True):
-                    xref = img[0]
-                    base_image = doc.extract_image(xref)
-                    image_bytes = base_image["image"]
-                    image_ext = base_image["ext"]
-                    
-                    b64_encoded = base64.b64encode(image_bytes).decode("utf-8")
-                    data_uri = f"data:image/{image_ext};base64,{b64_encoded}"
-                    image_markdowns.append(f"![image]({data_uri})")
-                
-                # Combine text and images for this page
-                combined_text = text_content
-                if image_markdowns:
-                    combined_text += "\n\n" + "\n\n".join(image_markdowns)
-                
+            for i, doc in enumerate(documents):
+                # Map back to the expected dictionary structure for downstream regex processing
+                page_no = doc.metadata.get("page", i + 1)
                 extracted_pages.append({
                     "metadata": {"page": page_no},
-                    "text": combined_text
+                    "text": doc.page_content
                 })
-            doc.close()
+            
             return extracted_pages
 
-        # Run the blocking fitz extraction in a separate thread
+        # Run the blocking extraction in a separate thread
         raw_pages = await asyncio.to_thread(extract_pdf_data, tmp_path)
         # -------------------------------------------
 
@@ -240,6 +230,7 @@ async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int
                     else:
                         chunk.page_content = "Image extraction failed or timed out."
 
+        
         # Trigger Pinecone Upload
         vector_store = PineconeVectorStore(index_name=os.getenv("PINECONE_INDEX_NAME"), embedding=embeddings)
         upload_task = asyncio.create_task(asyncio.to_thread(vector_store.add_documents, atomic_chunks))
@@ -258,14 +249,20 @@ async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int
             page_stats[key]["summary_length"] = len(res)
 
         final_page_summaries = {}
+        t0 = time.perf_counter()
         level_1_tasks = [aggregate_summary(page, texts, final_page_summaries) for page, texts in page_texts.items()]
         await asyncio.gather(*level_1_tasks)
+        logger.info(f"Page summaries took {time.perf_counter() - t0:.2f}s")
 
         # Full Summarization
         sorted_page_summaries = [f"Page {page}:\n{summary}" for page, summary in sorted(final_page_summaries.items())]
+        t0 = time.perf_counter()
         full_summary = await async_summarize("\n\n".join(sorted_page_summaries), PromptTemplate.from_template("Provide a comprehensive executive summary based on the following page-by-page summaries:\n\n{text}"), llm_semaphore, llm)
+        logger.info(f"Full summary took {time.perf_counter() - t0:.2f}s")
 
+        t0 = time.perf_counter()
         await upload_task 
+        logger.info(f"Pinecone upload took {time.perf_counter() - t0:.2f}s")
 
         return {
             "page_summaries": final_page_summaries,
