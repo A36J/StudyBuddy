@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+test.py
 # Dependencies & Build Outputs
 node_modules
 dist

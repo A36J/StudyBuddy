@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from pydantic import SecretStr
 import base64
 from typing import cast, List, Dict, Any
+import numpy as np
 
 from botocore.config import Config
 
@@ -21,8 +22,11 @@ from langchain_opendataloader_pdf import OpenDataLoaderPDFLoader
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import PromptTemplate
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_pinecone import PineconeVectorStore
 from langchain_core.documents import Document
+
+# --- NEW IMPORTS FOR HYBRID SEARCH ---
+from pinecone import Pinecone
+from pinecone_text.sparse import BM25Encoder
 
 load_dotenv()
 
@@ -40,7 +44,7 @@ s3_client = boto3.client(
     config=Config(
         signature_version='s3v4',
         region_name=os.getenv("AWS_REGION"),
-        s3={'addressing_style': 'virtual'} # <-- Forces bucket.s3.region.amazonaws.com
+        s3={'addressing_style': 'virtual'}
     )
 )
 
@@ -52,7 +56,6 @@ llm = ChatOpenAI(
     model="google/gemini-3.1-flash-lite",
     api_key=SecretStr(api_key),
     base_url="https://openrouter.ai/api/v1",
-    
     temperature=0.2,
     default_headers={"HTTP-Referer": "http://localhost:5173", "X-Title": "LangGraph Search Agent"}
 )
@@ -73,6 +76,18 @@ embeddings = OpenAIEmbeddings(
     model_kwargs={"encoding_format": "float"},              
     check_embedding_ctx_length=False
 )
+
+# --- INITIALIZE BM25 ENCODER ---
+bm25_encoder = BM25Encoder().default()
+
+
+def l2_normalize(vector: list[float]) -> list[float]:
+    """Normalizes a vector to length 1 so Dot Product acts like Cosine Similarity."""
+    vec_array = np.array(vector)
+    norm = np.linalg.norm(vec_array)
+    if norm == 0:
+        return vector
+    return (vec_array / norm).tolist()
 
 def remove_axis_noise(text: str) -> str:
     cleaned_lines = []
@@ -115,6 +130,24 @@ async def async_s3_download(bucket: str, key: str, tmp_path: str):
     await loop.run_in_executor(None, s3_client.download_file, bucket, key, tmp_path)
 
 
+# --- NATIVE PINECONE BATCH UPSERT HELPER ---
+async def async_pinecone_upsert(records: list):
+    """Upserts records to Pinecone in batches to avoid payload size limits."""
+    try:
+        pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+        # Using index name, replace with URL if you prefer targeting the host directly
+        index = pc.IndexAsyncio(os.getenv("PINECONE_INDEX_NAME")) 
+        
+        batch_size = 100
+        for i in range(0, len(records), batch_size):
+            batch = records[i:i + batch_size]
+            await index.upsert(vectors=batch)
+            logger.info(f"Upserted batch of {len(batch)} vectors to Pinecone.")
+    except Exception as e:
+        logger.error(f"Failed to upsert to Pinecone: {e}")
+        raise e
+
+
 async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int = 5):
     llm_semaphore = asyncio.Semaphore(max_concurrency)
     parsed_url = urlparse(s3_url)
@@ -137,20 +170,15 @@ async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int
         if doc_stats["file_size_bytes"] == 0:
             raise ValueError("Downloaded file is empty (0 bytes).")
 
-        # --- NEW OpenDataLoader EXTRACTION LOGIC ---
         def extract_pdf_data(filepath):
             loader = OpenDataLoaderPDFLoader(
                 file_path=filepath,
                 format="markdown",
-                # hybrid="docling-fast", 
-                # hybrid_url="http://localhost:5002",
-                # hybrid_mode="auto" 
             )
             documents = loader.load()
             
             extracted_pages = []
             for i, doc in enumerate(documents):
-                # Map back to the expected dictionary structure for downstream regex processing
                 page_no = doc.metadata.get("page", i + 1)
                 extracted_pages.append({
                     "metadata": {"page": page_no},
@@ -159,9 +187,7 @@ async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int
             
             return extracted_pages
 
-        # Run the blocking extraction in a separate thread
         raw_pages = await asyncio.to_thread(extract_pdf_data, tmp_path)
-        # -------------------------------------------
 
         doc_stats["page_count"] = len(raw_pages)
 
@@ -198,7 +224,6 @@ async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int
                         ))
                         global_chunk_index += 1
                 else:
-                   
                     cleaned_text = remove_axis_noise(part)
                     if not cleaned_text.strip(): continue
                         
@@ -230,10 +255,42 @@ async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int
                     else:
                         chunk.page_content = "Image extraction failed or timed out."
 
+
+        # ---------------------------------------------------------
+        # NEW HYBRID VECTOR GENERATION & UPLOAD LOGIC
+        # ---------------------------------------------------------
         
-        # Trigger Pinecone Upload
-        vector_store = PineconeVectorStore(index_name=os.getenv("PINECONE_INDEX_NAME"), embedding=embeddings)
-        upload_task = asyncio.create_task(asyncio.to_thread(vector_store.add_documents, atomic_chunks))
+        # 1. Prepare texts and ensure "text" is in metadata for retrieval
+        texts = []
+        for chunk in atomic_chunks:
+            chunk.metadata["text"] = chunk.page_content
+            texts.append(chunk.page_content)
+
+        logger.info("Generating dense embeddings...")
+        raw_dense_vectors = await embeddings.aembed_documents(texts)
+        
+        # --- NEW: Normalize the dense vectors ---
+        dense_vectors = [l2_normalize(v) for v in raw_dense_vectors]
+        
+
+        logger.info("Generating sparse BM25 vectors...")
+        # encode_documents is synchronous and CPU-bound, so we run it in a thread
+        sparse_vectors = await asyncio.to_thread(bm25_encoder.encode_documents, texts)
+
+        # 3. Construct native Pinecone records
+        vectors_to_upsert = []
+        for i, chunk in enumerate(atomic_chunks):
+            vec_id = f"{doc_id}_{chunk.metadata['chunk_index']}"
+            vectors_to_upsert.append({
+                "id": vec_id,
+                "values": dense_vectors[i],
+                "sparse_values": sparse_vectors[i],
+                "metadata": chunk.metadata
+            })
+
+        # 4. Trigger Native Pinecone Upload in background
+        upload_task = asyncio.create_task(async_pinecone_upsert(vectors_to_upsert))
+        # ---------------------------------------------------------
 
         # Page Summarization
         page_texts = defaultdict(list)
@@ -260,9 +317,10 @@ async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int
         full_summary = await async_summarize("\n\n".join(sorted_page_summaries), PromptTemplate.from_template("Provide a comprehensive executive summary based on the following page-by-page summaries:\n\n{text}"), llm_semaphore, llm)
         logger.info(f"Full summary took {time.perf_counter() - t0:.2f}s")
 
+        # Wait for the native Pinecone upload to finish
         t0 = time.perf_counter()
         await upload_task 
-        logger.info(f"Pinecone upload took {time.perf_counter() - t0:.2f}s")
+        logger.info(f"Native Pinecone upload took {time.perf_counter() - t0:.2f}s")
 
         return {
             "page_summaries": final_page_summaries,
@@ -279,7 +337,6 @@ async def async_process_pdf_logic(s3_url: str, doc_id: str, max_concurrency: int
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
         gc.collect()
-
 
 async def process_pdf_pipeline(doc_id: str, s3_url: str, db_pool):
     start_time = time.perf_counter()

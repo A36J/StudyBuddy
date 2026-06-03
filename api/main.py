@@ -27,6 +27,8 @@ from langchain_core.runnables import RunnableConfig
 from api.agent import build_agent 
 from api.worker import process_pdf_pipeline
 
+from pinecone import Pinecone
+
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
 
@@ -75,6 +77,15 @@ async def lifespan(app: FastAPI):
             raise e
 
     # 2. Setup LangGraph Pool (psycopg v3 via from_conn_string)
+    try:
+        pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+        # This creates the aiohttp connection pool. 
+        # Make sure this host URL matches your actual Pinecone index host.
+        app.state.pinecone_index = pc.IndexAsyncio(os.getenv("PINECONE_INDEX_NAME"))
+        print("Pinecone Async Index initialized successfully!")
+    except Exception as e:
+        print(f"Failed to initialize Pinecone: {e}")
+        raise e
   
     async with AsyncPostgresSaver.from_conn_string(DATABASE_URL or " " ) as checkpointer:
         
@@ -87,7 +98,7 @@ async def lifespan(app: FastAPI):
         # 3. Yield control to FastAPI to run the application
         yield 
         
-    
+    await app.state.pinecone_index.close()
     if hasattr(app.state, 'db_pool') and app.state.db_pool:
         await app.state.db_pool.close()
 
@@ -262,9 +273,10 @@ async def delete_thread(request: Request, thread_id: str):
 async def execute_search_agent(request: Request, thread_id: str, chat_req: ChatRequest):
     pool = request.app.state.db_pool
     agent_executor = request.app.state.agent_executor
+    pinecone_index=request.app.state.pinecone_index
     langfuse_handler = CallbackHandler()
     user_query = chat_req.query
-    config: RunnableConfig = {"configurable": {"thread_id": thread_id, "db_pool": pool},"callbacks": [langfuse_handler]}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id, "db_pool": pool, "pinecone_index": pinecone_index},"callbacks": [langfuse_handler]}
 
     async def event_stream():
         # Track the order of runs to save them chronologically

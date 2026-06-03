@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from pydantic import SecretStr
 from langchain_openai import OpenAIEmbeddings 
 from langchain.agents import create_agent 
-from langchain_pinecone import PineconeVectorStore
+# from langchain_pinecone import PineconeVectorStore
 from langchain_openrouter import ChatOpenRouter
 
 from api.tools import create_agent_tools
@@ -50,12 +50,12 @@ embeddings = OpenAIEmbeddings(
 )
 
 
-vector_store = PineconeVectorStore(
-    index_name=os.getenv("PINECONE_INDEX_NAME"), 
-    embedding=embeddings
-)
+# vector_store = PineconeVectorStore(
+#     index_name=os.getenv("PINECONE_INDEX_NAME"), 
+#     embedding=embeddings
+# )
 
-tools = create_agent_tools(vector_store=vector_store)
+tools = create_agent_tools()
 
 
 # memory = MemorySaver()
